@@ -416,3 +416,16 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# Lambda deployment packages
+lambda/**/*.zip
+
+# SAM build artifacts
+.aws-sam/
+samconfig.toml
+
+# Docker
+.dockerignore
+
+# Temporary files
+/tmp/

@@ -1,0 +1,65 @@
+version: 0.2
+
+phases:
+  pre_build:
+    commands:
+      - echo "Starting Lambda deployment build..."
+      - echo "Environment - $ENVIRONMENT"
+      - echo "Git Commit - $GIT_COMMIT"
+      - echo "Installing dependencies..."
+      - cd lambda
+      - npm ci --production
+      
+  build:
+    commands:
+      - echo "Packaging Lambda functions..."
+      - |
+        for dir in */; do
+          if [ -f "${dir}package.json" ]; then
+            echo "Packaging function: ${dir%/}"
+            cd "$dir"
+            zip -r "../${dir%/}.zip" . -x "*.git*" "node_modules/aws-sdk/*" "tests/*" "*.md"
+            cd ..
+          fi
+        done
+      
+  post_build:
+    commands:
+      - echo "Deploying Lambda functions to AWS..."
+      - |
+        for zip_file in *.zip; do
+          FUNCTION_NAME="${zip_file%.zip}"
+          FULL_FUNCTION_NAME="yeojeong-${ENVIRONMENT}-${FUNCTION_NAME}"
+          
+          echo "Deploying function: $FULL_FUNCTION_NAME"
+          
+          # Check if function exists
+          if aws lambda get-function --function-name "$FULL_FUNCTION_NAME" 2>/dev/null; then
+            # Update existing function
+            aws lambda update-function-code \
+              --function-name "$FULL_FUNCTION_NAME" \
+              --zip-file "fileb://${zip_file}"
+            
+            # Wait for update to complete
+            aws lambda wait function-updated \
+              --function-name "$FULL_FUNCTION_NAME"
+            
+            # Update function configuration if needed
+            aws lambda update-function-configuration \
+              --function-name "$FULL_FUNCTION_NAME" \
+              --environment "Variables={ENVIRONMENT=${ENVIRONMENT},GIT_COMMIT=${GIT_COMMIT}}"
+          else
+            echo "Function $FULL_FUNCTION_NAME does not exist. Please create it first via infrastructure deployment."
+          fi
+        done
+      - echo "Lambda deployment completed successfully!"
+
+artifacts:
+  files:
+    - '**/*'
+  base-directory: lambda
+  discard-paths: no
+
+cache:
+  paths:
+    - 'lambda/node_modules/**/*'
