@@ -1,0 +1,99 @@
+name: Deploy ECS Services
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+      service:
+        description: 'ECS service to deploy'
+        required: true
+        type: choice
+        options:
+          - api
+          - worker
+          - all
+  push:
+    branches:
+      - main
+    paths:
+      - 'ecs/**'
+      - 'buildspecs/ecs-buildspec.yml'
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: yeojeong-app
+
+jobs:
+  deploy-ecs:
+    name: Deploy ECS via CodeBuild
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'dev' }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+        
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
+      
+    - name: Trigger CodeBuild for ECS deployment
+      run: |
+        BUILD_ID=$(aws codebuild start-build \
+          --project-name yeojeong-ecs-deploy \
+          --environment-variables-override \
+            name=ENVIRONMENT,value=${{ github.event.inputs.environment || 'dev' }},type=PLAINTEXT \
+            name=SERVICE,value=${{ github.event.inputs.service || 'all' }},type=PLAINTEXT \
+            name=GIT_COMMIT,value=${{ github.sha }},type=PLAINTEXT \
+            name=ECR_REPOSITORY,value=${{ env.ECR_REPOSITORY }},type=PLAINTEXT \
+            name=IMAGE_TAG,value=${{ github.sha }},type=PLAINTEXT \
+          --source-version ${{ github.ref }} \
+          --query 'build.id' \
+          --output text)
+        
+        echo "CodeBuild ID: $BUILD_ID"
+        echo "BUILD_ID=$BUILD_ID" >> $GITHUB_ENV
+        
+    - name: Wait for CodeBuild completion
+      run: |
+        while true; do
+          BUILD_STATUS=$(aws codebuild batch-get-builds \
+            --ids ${{ env.BUILD_ID }} \
+            --query 'builds[0].buildStatus' \
+            --output text)
+          
+          echo "Build Status: $BUILD_STATUS"
+          
+          if [ "$BUILD_STATUS" = "SUCCEEDED" ]; then
+            echo "Build succeeded!"
+            exit 0
+          elif [ "$BUILD_STATUS" = "FAILED" ] || [ "$BUILD_STATUS" = "FAULT" ] || [ "$BUILD_STATUS" = "TIMED_OUT" ] || [ "$BUILD_STATUS" = "STOPPED" ]; then
+            echo "Build failed with status: $BUILD_STATUS"
+            exit 1
+          fi
+          
+          sleep 10
+        done
+        
+    - name: Get deployment info
+      if: success()
+      run: |
+        echo "ECS service deployed successfully!"
+        echo "Environment: ${{ github.event.inputs.environment || 'dev' }}"
+        echo "Service: ${{ github.event.inputs.service || 'all' }}"
+        echo "Image Tag: ${{ github.sha }}"

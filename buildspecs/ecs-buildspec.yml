@@ -1,0 +1,88 @@
+version: 0.2
+
+phases:
+  pre_build:
+    commands:
+      - echo "Starting ECS deployment build..."
+      - echo "Environment - $ENVIRONMENT"
+      - echo "Service - $SERVICE"
+      - echo "Image Tag - $IMAGE_TAG"
+      - echo "Logging in to Amazon ECR..."
+      - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
+      - REPOSITORY_URI=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$ECR_REPOSITORY
+      - COMMIT_HASH=$(echo $GIT_COMMIT | cut -c 1-7)
+      - IMAGE_TAG=${IMAGE_TAG:-$COMMIT_HASH}
+      
+  build:
+    commands:
+      - echo "Building Docker images..."
+      - cd ecs
+      - |
+        if [ "$SERVICE" = "api" ] || [ "$SERVICE" = "all" ]; then
+          echo "Building API service..."
+          docker build -t $REPOSITORY_URI:api-$IMAGE_TAG -f api/Dockerfile api/
+          docker tag $REPOSITORY_URI:api-$IMAGE_TAG $REPOSITORY_URI:api-latest
+        fi
+      - |
+        if [ "$SERVICE" = "worker" ] || [ "$SERVICE" = "all" ]; then
+          echo "Building Worker service..."
+          docker build -t $REPOSITORY_URI:worker-$IMAGE_TAG -f worker/Dockerfile worker/
+          docker tag $REPOSITORY_URI:worker-$IMAGE_TAG $REPOSITORY_URI:worker-latest
+        fi
+      
+  post_build:
+    commands:
+      - echo "Pushing Docker images to ECR..."
+      - |
+        if [ "$SERVICE" = "api" ] || [ "$SERVICE" = "all" ]; then
+          docker push $REPOSITORY_URI:api-$IMAGE_TAG
+          docker push $REPOSITORY_URI:api-latest
+        fi
+      - |
+        if [ "$SERVICE" = "worker" ] || [ "$SERVICE" = "all" ]; then
+          docker push $REPOSITORY_URI:worker-$IMAGE_TAG
+          docker push $REPOSITORY_URI:worker-latest
+        fi
+      - echo "Updating ECS services..."
+      - |
+        if [ "$SERVICE" = "api" ] || [ "$SERVICE" = "all" ]; then
+          CLUSTER_NAME="yeojeong-${ENVIRONMENT}-cluster"
+          SERVICE_NAME="yeojeong-${ENVIRONMENT}-api-service"
+          TASK_FAMILY="yeojeong-${ENVIRONMENT}-api-task"
+          
+          # Get current task definition
+          TASK_DEFINITION=$(aws ecs describe-task-definition --task-definition $TASK_FAMILY --region $AWS_DEFAULT_REGION)
+          
+          # Create new task definition with updated image
+          NEW_TASK_DEF=$(echo $TASK_DEFINITION | jq --arg IMAGE "$REPOSITORY_URI:api-$IMAGE_TAG" '.taskDefinition | .containerDefinitions[0].image = $IMAGE | del(.taskDefinitionArn) | del(.revision) | del(.status) | del(.requiresAttributes) | del(.compatibilities) | del(.registeredAt) | del(.registeredBy)')
+          
+          # Register new task definition
+          NEW_TASK_INFO=$(aws ecs register-task-definition --region $AWS_DEFAULT_REGION --cli-input-json "$NEW_TASK_DEF")
+          NEW_REVISION=$(echo $NEW_TASK_INFO | jq '.taskDefinition.revision')
+          
+          # Update service
+          aws ecs update-service --cluster $CLUSTER_NAME --service $SERVICE_NAME --task-definition $TASK_FAMILY:$NEW_REVISION --region $AWS_DEFAULT_REGION
+          
+          # Wait for service to stabilize
+          aws ecs wait services-stable --cluster $CLUSTER_NAME --services $SERVICE_NAME --region $AWS_DEFAULT_REGION
+        fi
+      - |
+        if [ "$SERVICE" = "worker" ] || [ "$SERVICE" = "all" ]; then
+          CLUSTER_NAME="yeojeong-${ENVIRONMENT}-cluster"
+          SERVICE_NAME="yeojeong-${ENVIRONMENT}-worker-service"
+          TASK_FAMILY="yeojeong-${ENVIRONMENT}-worker-task"
+          
+          TASK_DEFINITION=$(aws ecs describe-task-definition --task-definition $TASK_FAMILY --region $AWS_DEFAULT_REGION)
+          NEW_TASK_DEF=$(echo $TASK_DEFINITION | jq --arg IMAGE "$REPOSITORY_URI:worker-$IMAGE_TAG" '.taskDefinition | .containerDefinitions[0].image = $IMAGE | del(.taskDefinitionArn) | del(.revision) | del(.status) | del(.requiresAttributes) | del(.compatibilities) | del(.registeredAt) | del(.registeredBy)')
+          NEW_TASK_INFO=$(aws ecs register-task-definition --region $AWS_DEFAULT_REGION --cli-input-json "$NEW_TASK_DEF")
+          NEW_REVISION=$(echo $NEW_TASK_INFO | jq '.taskDefinition.revision')
+          aws ecs update-service --cluster $CLUSTER_NAME --service $SERVICE_NAME --task-definition $TASK_FAMILY:$NEW_REVISION --region $AWS_DEFAULT_REGION
+          aws ecs wait services-stable --cluster $CLUSTER_NAME --services $SERVICE_NAME --region $AWS_DEFAULT_REGION
+        fi
+      - echo "ECS deployment completed successfully!"
+
+artifacts:
+  files:
+    - '**/*'
+  base-directory: ecs
+  discard-paths: no

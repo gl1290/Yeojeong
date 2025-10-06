@@ -1,0 +1,72 @@
+version: 0.2
+
+phases:
+  pre_build:
+    commands:
+      - echo "Starting infrastructure deployment build..."
+      - echo "Environment - $ENVIRONMENT"
+      - echo "Stack - $STACK"
+      - echo "Installing dependencies..."
+      - pip install --upgrade awscli aws-sam-cli
+      
+  build:
+    commands:
+      - echo "Deploying infrastructure stacks..."
+      - cd infrastructure
+      - |
+        if [ "$STACK" = "api-gateway" ] || [ "$STACK" = "all" ]; then
+          echo "Deploying API Gateway stack..."
+          sam deploy \
+            --template-file api-gateway/template.yaml \
+            --stack-name yeojeong-${ENVIRONMENT}-api-gateway \
+            --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
+            --parameter-overrides \
+              Environment=$ENVIRONMENT \
+              ProjectName=yeojeong \
+            --no-fail-on-empty-changeset \
+            --region $AWS_DEFAULT_REGION
+        fi
+      - |
+        if [ "$STACK" = "s3" ] || [ "$STACK" = "all" ]; then
+          echo "Deploying S3 stack..."
+          sam deploy \
+            --template-file s3/template.yaml \
+            --stack-name yeojeong-${ENVIRONMENT}-s3 \
+            --capabilities CAPABILITY_IAM \
+            --parameter-overrides \
+              Environment=$ENVIRONMENT \
+              ProjectName=yeojeong \
+            --no-fail-on-empty-changeset \
+            --region $AWS_DEFAULT_REGION
+        fi
+      
+  post_build:
+    commands:
+      - echo "Getting stack outputs..."
+      - |
+        if [ "$STACK" = "api-gateway" ] || [ "$STACK" = "all" ]; then
+          echo "API Gateway Stack Outputs:"
+          aws cloudformation describe-stacks \
+            --stack-name yeojeong-${ENVIRONMENT}-api-gateway \
+            --query 'Stacks[0].Outputs' \
+            --region $AWS_DEFAULT_REGION
+        fi
+      - |
+        if [ "$STACK" = "s3" ] || [ "$STACK" = "all" ]; then
+          echo "S3 Stack Outputs:"
+          aws cloudformation describe-stacks \
+            --stack-name yeojeong-${ENVIRONMENT}-s3 \
+            --query 'Stacks[0].Outputs' \
+            --region $AWS_DEFAULT_REGION
+        fi
+      - echo "Infrastructure deployment completed successfully!"
+
+artifacts:
+  files:
+    - '**/*'
+  base-directory: infrastructure
+  discard-paths: no
+
+cache:
+  paths:
+    - '/root/.cache/pip/**/*'
