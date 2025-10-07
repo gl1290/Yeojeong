@@ -301,6 +301,41 @@ Default region is `us-east-1`. To change:
 2. Update region in buildspec files
 3. Update region in CloudFormation templates
 
+## AWS Resource Tagging
+
+All AWS resources created by this project are tagged with `Yeojeong: true` for easy identification and management. This tagging strategy applies to:
+
+- **Infrastructure resources** (S3 buckets, API Gateway, Lambda functions, CloudWatch Log Groups) - defined in CloudFormation/SAM templates
+- **ECS task definitions** - tagged via environment variables
+- **ECR repositories** - tagged during creation in `scripts/setup-aws.sh`
+- **IAM roles** - tagged during creation in `scripts/setup-aws.sh`
+- **CodeBuild projects** - tagged during creation in `scripts/setup-aws.sh`
+
+### Viewing Tagged Resources
+
+To list all resources with the Yeojeong tag:
+
+```bash
+# Using AWS Resource Groups Tagging API
+aws resourcegroupstaggingapi get-resources \
+  --tag-filters Key=Yeojeong,Values=true \
+  --region us-east-1
+```
+
+### Cleanup
+
+The Yeojeong tag makes it easy to identify and delete all project resources:
+
+```bash
+# List all Yeojeong-tagged resources for review before deletion
+aws resourcegroupstaggingapi get-resources \
+  --tag-filters Key=Yeojeong,Values=true \
+  --region us-east-1 \
+  --query 'ResourceTagMappingList[*].ResourceARN'
+```
+
+Then delete resources manually or using the appropriate AWS CLI commands for each resource type.
+
 ## Contributing
 
 1. Create a feature branch

@@ -42,6 +42,10 @@ Resources:
       AccessLogSetting:
         DestinationArn: !GetAtt ApiLogGroup.Arn
         Format: '$context.requestId $context.extendedRequestId $context.identity.sourceIp $context.requestTime $context.routeKey $context.status'
+      Tags:
+        Environment: !Ref Environment
+        Project: !Ref ProjectName
+        Yeojeong: true
       
   # CloudWatch Log Group for API Gateway
   ApiLogGroup:
@@ -49,6 +53,13 @@ Resources:
     Properties:
       LogGroupName: !Sub '/aws/apigateway/${ProjectName}-${Environment}'
       RetentionInDays: 30
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Yeojeong
+          Value: true
       
   # Sample Lambda Function
   HelloWorldFunction:
@@ -73,6 +84,7 @@ Resources:
       Tags:
         Environment: !Ref Environment
         Project: !Ref ProjectName
+        Yeojeong: true
         
   # Lambda Function Log Group
   HelloWorldLogGroup:
@@ -80,6 +92,13 @@ Resources:
     Properties:
       LogGroupName: !Sub '/aws/lambda/${ProjectName}-${Environment}-hello-world'
       RetentionInDays: 30
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Yeojeong
+          Value: true
 
 Outputs:
   ApiUrl:
