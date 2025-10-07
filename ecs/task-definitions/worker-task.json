@@ -15,6 +15,10 @@
         {
           "name": "ENVIRONMENT",
           "value": "dev"
+        },
+        {
+          "name": "Yeojeong",
+          "value": "true"
         }
       ],
       "logConfiguration": {

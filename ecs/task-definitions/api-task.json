@@ -25,6 +25,10 @@
         {
           "name": "PORT",
           "value": "3000"
+        },
+        {
+          "name": "Yeojeong",
+          "value": "true"
         }
       ],
       "logConfiguration": {

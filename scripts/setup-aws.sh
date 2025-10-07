@@ -47,7 +47,8 @@ else
     aws ecr create-repository \
         --repository-name yeojeong-app \
         --region $AWS_REGION \
-        --image-scanning-configuration scanOnPush=true
+        --image-scanning-configuration scanOnPush=true \
+        --tags Key=Yeojeong,Value=true
     echo "✓ ECR repository 'yeojeong-app' created"
 fi
 
@@ -78,7 +79,8 @@ EOF
     aws iam create-role \
         --role-name $ROLE_NAME \
         --assume-role-policy-document file:///tmp/trust-policy.json \
-        --description "Service role for Yeojeong CodeBuild projects"
+        --description "Service role for Yeojeong CodeBuild projects" \
+        --tags Key=Yeojeong,Value=true
 
     # Attach policies
     aws iam attach-role-policy \
@@ -128,7 +130,8 @@ else
         --environment type=LINUX_CONTAINER,image=aws/codebuild/standard:7.0,computeType=BUILD_GENERAL1_SMALL,privilegedMode=false \
         --service-role $ROLE_ARN \
         --region $AWS_REGION \
-        --buildspec buildspecs/lambda-buildspec.yml
+        --buildspec buildspecs/lambda-buildspec.yml \
+        --tags Key=Yeojeong,Value=true
     echo "✓ CodeBuild project '$PROJECT_NAME' created"
 fi
 
@@ -144,7 +147,8 @@ else
         --environment type=LINUX_CONTAINER,image=aws/codebuild/standard:7.0,computeType=BUILD_GENERAL1_SMALL,privilegedMode=true \
         --service-role $ROLE_ARN \
         --region $AWS_REGION \
-        --buildspec buildspecs/ecs-buildspec.yml
+        --buildspec buildspecs/ecs-buildspec.yml \
+        --tags Key=Yeojeong,Value=true
     echo "✓ CodeBuild project '$PROJECT_NAME' created"
 fi
 
@@ -160,7 +164,8 @@ else
         --environment type=LINUX_CONTAINER,image=aws/codebuild/standard:7.0,computeType=BUILD_GENERAL1_SMALL,privilegedMode=false \
         --service-role $ROLE_ARN \
         --region $AWS_REGION \
-        --buildspec buildspecs/infrastructure-buildspec.yml
+        --buildspec buildspecs/infrastructure-buildspec.yml \
+        --tags Key=Yeojeong,Value=true
     echo "✓ CodeBuild project '$PROJECT_NAME' created"
 fi
 
